@@ -16,7 +16,7 @@ to forward slashes (`/`) to avoid issues within a string.
 
 @author: Qiushi (Chris) Tian
 
-Last edit: 2023 07 10
+Last edit: 2023 08 16
 """
 
 import os
@@ -30,6 +30,7 @@ SRC_PATH = Path("D:/Images/Scheduler/Kyle McGregor")
 
 # Define the path for the copied FITS files
 DEST_PATH = Path("//tsclient/mountpoint/space-raw")
+DEST_PATH = Path("D:/chris-tian/for-jj")
 # DEST_PATH = Path("//tsclient/mountpoint/schcopy_test")
 
 # TODO
@@ -69,7 +70,7 @@ def robocopy(src, dest, mt=8):
         print(roboproc.stderr)
         print()
         raise subprocess.CalledProcessError(roboproc.returncode, robocmd)
-    
+
     # no error, echo by returning
     return f'robocopy {roboproc.returncode} {src}'
 
@@ -81,6 +82,7 @@ def copycalib(date):
     # SRC = Path('D:/chris-tian/copy-folder-test/Images')
 
     DST = Path('//tsclient/mountpoint/space-raw/calib')
+    DST = Path("D:/chris-tian/for-jj/calib")
     # DST = Path('//tsclient/mountpoint/schcopy_test/Calib')
 
     if (SRC / date).exists():
@@ -106,16 +108,19 @@ if __name__ == '__main__':
 
     import sys
     if len(sys.argv) < 2 or sys.argv[1] in ['h', '/h', '-h', '--h', r'\h', 'help', '/help', '-help', '--help', r'\help']:
-        print('Usage: python **/schcopy.py <target_name_separate_by_space> [<start_date>] [<end_date>]')
+        print('Usage: python **/schcopy.py <target_name_separate_by_space_QUOTED> [<start_date_inclusive>] [<end_date_exclusive>]')
         sys.exit(0)
     input_target = sys.argv[1]
-    target_san = input_target.replace(' ', '_')
+    target_san = input_target.replace('_', ' ').replace('-', ' ')
     if len(sys.argv) >= 3:
         start = int(sys.argv[2])
     if len(sys.argv) >= 4:
         end = int(sys.argv[3])
 
     dates = set()
+    # TODO `calib_dates` is only a temporary implementation (see below)
+    calib_dates = {'20230409', '20230319', '20230613', '20230530', '20230421', '20230329', '20230628', '20221213', '20230701', '20230326', '20230321', '20230118', '20230128', '20230218', '20230320', '20230705', '20230707', '20230427', '20230224', '20230629', '20230627', '20230330', '20230525', '20230117', '20221225', '20230425', '20230407', '20230220', '20230505', '20230419', '20230417', '20230324', '20221208', '20230410', '20221128', '20230610', '20221214', '20230131', '20230225', '20230531', '20230216', '20230318', '20230226', '20230213', '20230221', '20230524', '20221224', '20230402', '20230523', '20230316', '20230601', '20230423', '20230522', '20230426', '20230706', '20230328', '20230311', '20230315', '20230506'}
+    calib_dates = set()
     nfile = 0
 
     # TODO read log and skip already copied
@@ -125,69 +130,89 @@ if __name__ == '__main__':
     # what is that?
 
     # TODO os.scandir os.listdir Path.iterdir??
-
-    # loop through date-named subdirs
-    for date_path in SRC_PATH.iterdir():
-        # skip non-folders
-        if not date_path.is_dir():
-            continue
-
-        # VARIBLE date string
-        date = date_path.name
-
-        # skip non-date folders
-        if not date.startswith('20'):
-            continue
-
-        # date range
-        datenum = int(date)
-        if datenum < start or datenum > end:
-            continue
-
-        # loop through targets of the day
-        for target_path in date_path.iterdir():
+    excepted = None
+    try:
+        # loop through date-named subdirs
+        for date_path in SRC_PATH.iterdir():
             # skip non-folders
-            if not target_path.is_dir():
+            if not date_path.is_dir():
                 continue
 
-            target = target_path.name
+            # VARIBLE date string
+            date = date_path.name
 
-            # skip non-targets folders
-            if not is_target(target, input_target):
+            # skip non-date folders
+            if not date.startswith('20'):
                 continue
 
-            # record date of file being copied
-            dates.add(date)
-
-            # number of files
-            n = len(list(target_path.iterdir()))
-            if n < 1: # skip emplty dir
+            # date range
+            datenum = int(date)
+            if datenum < start or datenum >= end:
                 continue
-            nfile += n
 
-            # COPYING
-            dest = DEST_PATH / target_san / date
-            os.makedirs(dest, exist_ok=True)
-            print(copy(target_path, dest))
-            print(copycalib(date), end='\n\n')
+            # loop through targets of the day
+            for target_path in date_path.iterdir():
+                # skip non-folders
+                if not target_path.is_dir():
+                    continue
 
-    # sort dates
-    sorted_dates = sorted(dates)
+                target = target_path.name
 
-    # TODO add creating file header
+                # skip non-targets folders
+                if not is_target(target, input_target):
+                    continue
 
-    # write file
-    with open(LOG_ROOT / f'schcopy_{target_san}.log', mode='a') as f:
-        f.writelines(date + '\n' for date in sorted_dates[:-1])
-        f.write(f'{sorted_dates[-1]}\t{datetime.now().isoformat()}\t{nfile}\n')
+                # record date of file being copied
+                dates.add(date)
 
-    # get total size
-    total_size = [nfile * FILE_SIZE / 1024 / 1024 / 1024, 'GB']
-    if total_size[0] < 1:
-        total_size[0] *= 1024
-        total_size[1] = 'MB'
+                # number of files
+                n = len(list(target_path.iterdir()))
+                if n < 1: # skip emplty dir
+                    continue
+                nfile += n
 
-    # print result stat
-    print('\n---------------- Run Concluded ----------------')
-    print('Dates copied:', sorted_dates)
-    print(f'{nfile} file(s) copied, estimated to be {total_size}\n')
+                # COPYING
+                dest = DEST_PATH / target_san / date # TODO folder name should contain commentary info
+                os.makedirs(dest, exist_ok=True)
+                print(copy(target_path, dest))
+                if date not in calib_dates:
+                    print(copycalib(date), end='\n\n')
+                    calib_dates.add(date)
+                else:
+                    print(f'calib DONE {date}', end='\n\n')
+    except Exception as e:
+        excepted = e
+
+    if len(dates):
+        # sort dates
+        sorted_dates = sorted(dates)
+
+        # TODO add creating file header
+
+        # write file
+        log_path = LOG_ROOT / datetime.now().isoformat().replace('.', '_').replace(':', '-')
+        os.makedirs(log_path)
+        with open(log_path / f'schcopy_{target_san}.log', mode='a') as f:
+            f.writelines(date + '\n' for date in sorted_dates[:-1])
+            f.write(f'{sorted_dates[-1]}\t{datetime.now().isoformat()}\t{nfile}\n')
+
+        # get total size
+        total_size = [nfile * FILE_SIZE / 1024 / 1024 / 1024, 'GB']
+        if total_size[0] < 1:
+            total_size[0] *= 1024
+            total_size[1] = 'MB'
+
+        # print result stat
+        try:
+            print('\n---------------- Run Concluded ----------------')
+            print('Science copied:', sorted_dates)
+            print('Calib copied:', calib_dates)
+            print(f'{nfile} sicence file(s) copied, estimated to be {total_size}\n')
+        except NameError:
+            pass
+    else:
+        print('\n---------------- Run Concluded ----------------')
+        print('NOTHING COPIED!!')
+
+    if excepted:
+        raise excepted
